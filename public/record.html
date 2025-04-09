@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 50px; }
+        .container { max-width: 800px; }
+        .video-feed { max-width: 100%; border-radius: 10px; }
+        .error { color: #dc3545; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Recording Face Data</h1>
+        <p class="text-center">Rotate your head (up, down, left, right) for 10 seconds.</p>
+        <video id="video" width="640" height="480" autoplay class="video-feed mx-auto d-block"></video>
+        <div class="text-center mt-3">
+            <button id="startBtn" class="btn btn-success">Start Recording</button>
+            <button id="stopBtn" class="btn btn-danger" disabled>Stop & Upload</button>
+        </div>
+        <p id="status" class="text-center mt-3"></p>
+    </div>
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                status.textContent = `Error accessing webcam: ${err.message}`;
+            });
+
+        startBtn.addEventListener('click', () => {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(video.srcObject);
+            mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+            mediaRecorder.onstop = uploadVideo;
+            mediaRecorder.start();
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            status.textContent = "Recording... Rotate your head for 10 seconds.";
+            setTimeout(() => {
+                if (mediaRecorder.state === "recording") mediaRecorder.stop();
+            }, 10000);
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (mediaRecorder.state === "recording") mediaRecorder.stop();
+        });
+
+        function uploadVideo() {
+            stopBtn.disabled = true;
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const name = localStorage.getItem('name');
+            const dob = localStorage.getItem('dob');
+            const formData = new FormData();
+            formData.append('video', blob, `${name}_${dob}.webm`);
+            formData.append('name', name);
+            formData.append('dob', dob);
+
+            fetch('/api/process', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                status.textContent = data.message;
+                setTimeout(() => window.location.href = '/', 2000);
+            })
+            .catch(err => {
+                status.textContent = `Upload failed: ${err.message}`;
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
